@@ -605,167 +605,6 @@ function ReviewSection({ policy }) {
     navigator.clipboard.writeText(generateText());
   };
 
-  const [docxStatus, setDocxStatus] = useState("");
-
-  const downloadDocx = async () => {
-    setDocxStatus("Building…");
-    try {
-      if (!window.docx) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js";
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, LevelFormat, Header, Footer, PageNumber } = window.docx;
-
-      const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-      const name = policy.name || "[Your Name]";
-      const mkRun = (text, opts = {}) => new TextRun({ text: String(text || ""), font: "Arial", size: 22, ...opts });
-      const mkBody = (text) => new Paragraph({ spacing: { before: 60, after: 100 }, children: [mkRun(text)] });
-      const mkSpacer = () => new Paragraph({ spacing: { before: 60, after: 60 }, children: [mkRun("")] });
-      const mkH1 = (text) => new Paragraph({
-        heading: HeadingLevel.HEADING_1, spacing: { before: 320, after: 100 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "7c3aed", space: 6 } },
-        children: [new TextRun({ text, font: "Arial", size: 28, bold: true, color: "111111" })]
-      });
-      const mkH2 = (text) => new Paragraph({
-        heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 80 },
-        children: [new TextRun({ text, font: "Arial", size: 24, bold: true, color: "7c3aed" })]
-      });
-      const mkBullet = (label, value) => new Paragraph({
-        numbering: { reference: "bullets", level: 0 }, spacing: { before: 40, after: 40 },
-        children: value ? [mkRun(label + ": ", { bold: true }), mkRun(value)] : [mkRun(label)]
-      });
-      const LL = { unrestricted: "Unrestricted", review: "With review", limited: "Limited", prohibited: "Not permitted" };
-      const DL = { none: "No disclosure needed", light: "Brief mention", standard: "Standard statement", detailed: "Detailed attribution" };
-      const USAGE_CONTEXTS_LIST = [
-        { id: "writing", label: "Writing & Drafting" }, { id: "research", label: "Research & Analysis" },
-        { id: "coding", label: "Code & Technical Work" }, { id: "creative", label: "Creative Projects" },
-        { id: "decision", label: "Decision Support" }, { id: "personal", label: "Personal Reflection" },
-      ];
-      const DISC_CTX = [
-        { id: "internal", label: "Internal Work Docs" }, { id: "client", label: "Client Deliverables" },
-        { id: "public", label: "Public Content" }, { id: "academic", label: "Academic Submissions" },
-        { id: "creative_pub", label: "Published Creative Work" }, { id: "social", label: "Social Media" },
-      ];
-      const children = [
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 480, after: 120 },
-          children: [new TextRun({ text: "Principled", font: "Arial", size: 52, bold: true, color: "111111" })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 },
-          children: [new TextRun({ text: "Personal AI Policy", font: "Arial", size: 26, color: "7c3aed", italics: true })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 80 },
-          children: [new TextRun({ text: `${name}${policy.role ? "  —  " + policy.role : ""}`, font: "Arial", size: 24, color: "555555" })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 480 },
-          children: [new TextRun({ text: `Effective: ${date}`, font: "Arial", size: 20, color: "888888" })] }),
-        new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "7c3aed", space: 1 } },
-          spacing: { before: 0, after: 360 }, children: [mkRun("")] }),
-        ...(Object.keys(policy.usageContexts || {}).length > 0 ? [
-          mkH1("1. Usage Standards"),
-          mkH2("Usage Level by Context"),
-          ...USAGE_CONTEXTS_LIST.filter(u => policy.usageContexts[u.id]).map(u => mkBullet(u.label, LL[policy.usageContexts[u.id]] || policy.usageContexts[u.id])),
-          ...(policy.dataRules ? [mkSpacer(), mkH2("General Principles"), mkBody(policy.dataRules)] : []),
-          mkSpacer(),
-        ] : []),
-        ...((policy.sensitiveCategories || []).length > 0 ? [
-          mkH1("2. Privacy & Confidentiality"),
-          mkH2("Information I Will NOT Share with AI Systems"),
-          ...(policy.sensitiveCategories || []).map(c => mkBullet(c)),
-          mkSpacer(),
-        ] : []),
-        ...((policy.qualityChecks || []).length > 0 ? [
-          mkH1("3. Quality Control"),
-          mkH2("My Quality Checklist"),
-          ...(policy.qualityChecks || []).map(c => mkBullet(c)),
-          ...(policy.humanReviewThreshold ? [mkSpacer(), mkH2("Human Review Threshold"), mkBody(`Require human review for: ${policy.humanReviewThreshold}-stakes work and above`)] : []),
-          mkSpacer(),
-        ] : []),
-        ...((policy.ethicalIssues || []).length > 0 || policy.decisionFramework ? [
-          mkH1("4. Ethics Framework"),
-          ...((policy.ethicalIssues || []).length > 0 ? [mkH2("Key Ethical Considerations"), ...(policy.ethicalIssues || []).map(i => mkBullet(i)), mkSpacer()] : []),
-          ...(policy.decisionFramework ? [mkH2("Decision Framework"), mkBody(policy.decisionFramework), mkSpacer()] : []),
-          ...(policy.stakeholders ? [mkH2("Affected Stakeholders"), mkBody(policy.stakeholders), mkSpacer()] : []),
-        ] : []),
-        ...(Object.keys(policy.disclosureByContext || {}).length > 0 || policy.attributionTemplate ? [
-          mkH1("5. Disclosure & Attribution"),
-          ...(Object.keys(policy.disclosureByContext || {}).length > 0 ? [
-            mkH2("Disclosure Level by Context"),
-            ...DISC_CTX.filter(c => policy.disclosureByContext[c.id]).map(c => mkBullet(c.label, DL[policy.disclosureByContext[c.id]] || policy.disclosureByContext[c.id])),
-            mkSpacer(),
-          ] : []),
-          ...(policy.attributionTemplate ? [
-            mkH2("My Attribution Statement"),
-            new Paragraph({ spacing: { before: 80, after: 120 }, indent: { left: 720 },
-              border: { left: { style: BorderStyle.SINGLE, size: 8, color: "7c3aed", space: 12 } },
-              children: [mkRun(policy.attributionTemplate, { italics: true, color: "7c3aed" })] }),
-            mkSpacer(),
-          ] : []),
-        ] : []),
-        new Paragraph({ border: { top: { style: BorderStyle.SINGLE, size: 4, color: "3f3f46", space: 6 } },
-          spacing: { before: 360, after: 120 }, children: [mkRun("")] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 },
-          children: [mkRun("This is a living document.", { bold: true, color: "7c3aed" })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 240 },
-          children: [mkRun("Revisit every 6 months, and whenever I encounter a situation this policy does not address.", { color: "888888", italics: true, size: 20 })] }),
-      ];
-      const doc = new Document({
-        styles: {
-          default: { document: { run: { font: "Arial", size: 22, color: "111111" } } },
-          paragraphStyles: [
-            { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-              run: { size: 28, bold: true, font: "Arial", color: "111111" },
-              paragraph: { spacing: { before: 320, after: 100 }, outlineLevel: 0 } },
-            { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
-              run: { size: 24, bold: true, font: "Arial", color: "7c3aed" },
-              paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 1 } },
-          ]
-        },
-        numbering: { config: [{ reference: "bullets", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•",
-          alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } }, run: { font: "Arial", size: 22 } } }] }] },
-        sections: [{
-          properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-          headers: { default: new Header({ children: [new Paragraph({
-            border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "3f3f46", space: 6 } },
-            spacing: { before: 0, after: 120 },
-            children: [new TextRun({ text: `Principled  —  ${name}`, font: "Arial", size: 18, color: "888888", italics: true })]
-          })]})},
-          footers: { default: new Footer({ children: [new Paragraph({
-            alignment: AlignmentType.CENTER,
-            border: { top: { style: BorderStyle.SINGLE, size: 4, color: "3f3f46", space: 6 } },
-            spacing: { before: 120, after: 0 },
-            children: [new TextRun({ children: [PageNumber.CURRENT], font: "Arial", size: 18, color: "888888" })]
-          })]})},
-          children
-        }]
-      });
-      const buffer = await Packer.toBlob(doc);
-      const url = URL.createObjectURL(buffer);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Principled-AI-Policy-${(policy.name || "My").replace(/\s+/g, "-")}.docx`;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
-      setDocxStatus("Downloaded ✓");
-      setTimeout(() => setDocxStatus(""), 3000);
-    } catch (err) {
-      console.error(err);
-      setDocxStatus("Error — try again");
-      setTimeout(() => setDocxStatus(""), 4000);
-    }
-  };
-
-  const downloadJson = () => {
-    const blob = new Blob([JSON.stringify(policy, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Principled-AI-Policy-${(policy.name || "My").replace(/\s+/g, "-")}.json`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-  };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ marginBottom: 4 }}>
@@ -786,24 +625,11 @@ function ReviewSection({ policy }) {
       <Card style={{ background: "#09090b", fontFamily: "'IBM Plex Mono', monospace" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: "#71717a", textTransform: "uppercase", letterSpacing: 1 }}>Policy document</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={copyToClipboard} style={{
-              padding: "6px 14px", borderRadius: 6, border: "1px solid #3f3f46",
-              background: "#18181b", color: "#a1a1aa", cursor: "pointer",
-              fontSize: 12, fontFamily: "inherit",
-            }}>Copy text</button>
-            <button onClick={downloadDocx} style={{
-              padding: "6px 16px", borderRadius: 6, border: "1.5px solid #7c3aed",
-              background: "#7c3aed22", color: "#a78bfa", cursor: "pointer",
-              fontSize: 12, fontFamily: "inherit", fontWeight: 700,
-            }}>↓ Download .docx</button>
-            <button onClick={downloadJson} style={{
-              padding: "6px 12px", borderRadius: 6, border: "1px solid #3f3f46",
-              background: "#18181b", color: "#71717a", cursor: "pointer",
-              fontSize: 12, fontFamily: "inherit",
-            }} title="Save answers to reload later">↓ Save .json</button>
-            {docxStatus && <span style={{ fontSize: 12, color: "#a78bfa", fontStyle: "italic" }}>{docxStatus}</span>}
-          </div>
+          <button onClick={copyToClipboard} style={{
+            padding: "6px 14px", borderRadius: 6, border: "1px solid #3f3f46",
+            background: "#18181b", color: "#a1a1aa", cursor: "pointer",
+            fontSize: 12, fontFamily: "inherit",
+          }}>Copy text</button>
         </div>
         <pre style={{ fontSize: 12, color: "#d4d4d8", whiteSpace: "pre-wrap", lineHeight: 1.8, margin: 0, overflowX: "auto" }}>
           {generateText()}
@@ -852,16 +678,15 @@ export default function App() {
         <div style={{
           padding: "28px 32px 0", maxWidth: 860, margin: "0 auto",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
             <h1 style={{
               fontSize: 28, fontWeight: 700, fontFamily: "'DM Serif Display', serif",
               color: "#f4f4f5", letterSpacing: "-0.5px",
-            }}>Principled</h1>
-            <div style={{ width: 1, height: 20, background: "#3f3f46" }} />
-            <div style={{ fontSize: 13, color: "#71717a", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>a personal AI policy builder</div>
+            }}>Personal AI Policy</h1>
+            <div style={{ fontSize: 12, color: "#52525b", fontFamily: "'IBM Plex Mono', monospace", paddingBottom: 2 }}>v1.0</div>
           </div>
           <p style={{ fontSize: 14, color: "#71717a", marginBottom: 28 }}>
-            Define where you stand — your standards, boundaries, and values for working with AI.
+            Define your standards, boundaries, and values for working with AI.
           </p>
 
           {/* Nav */}
